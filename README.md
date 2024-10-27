@@ -19,7 +19,7 @@ The endpoints /metrics returns prometheus-compatible metrics for each node calle
 ## Prometheus /metrics example
 
 ```
-$ curl IP:9750/metrics
+$ curl node1-ip:9750/metrics
 # HELP pod_cpu_nr_throttled_count CPU Throttled periods per Pod
 # TYPE pod_cpu_nr_throttled_count counter
 pod_cpu_nr_throttled_count{namespace="cc-test", pod="rdei-tools-7f7b4f97b7-m222r"} 25399

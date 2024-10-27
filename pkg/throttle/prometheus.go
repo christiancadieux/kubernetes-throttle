@@ -84,23 +84,17 @@ func SendPrometheusNodeData(w http.ResponseWriter, logger *logrus.Logger, ctx co
 	fmt.Fprintf(w, "# HELP pod_cpu_nr_throttled_count CPU Throttled periods per Pod\n")
 	fmt.Fprintf(w, "# TYPE pod_cpu_nr_throttled_count counter\n")
 	for _, m := range podMetrics {
-		if m.nr_periods > 0 {
-			fmt.Fprintf(w, `pod_cpu_nr_throttled_count{namespace="%s", pod="%s"} %d`+"\n", m.Namespace, m.Name, m.nr_throttled)
-		}
+		fmt.Fprintf(w, `pod_cpu_nr_throttled_count{namespace="%s", pod="%s"} %d`+"\n", m.Namespace, m.Name, m.nr_throttled)
 	}
 	fmt.Fprintf(w, "# HELP pod_cpu_nr_periods_count CPU periods per Pod\n")
 	fmt.Fprintf(w, "# TYPE pod_cpu_nr_periods_count counter\n")
 	for _, m := range podMetrics {
-		if m.nr_periods > 0 {
-			fmt.Fprintf(w, `pod_cpu_nr_periods_count{namespace="%s", pod="%s"} %d`+"\n", m.Namespace, m.Name, m.nr_periods)
-		}
+		fmt.Fprintf(w, `pod_cpu_nr_periods_count{namespace="%s", pod="%s"} %d`+"\n", m.Namespace, m.Name, m.nr_periods)
 	}
 	fmt.Fprintf(w, "# HELP pod_cpu_throttled_time_count CPU throttled time per Pod\n")
 	fmt.Fprintf(w, "# TYPE pod_cpu_throttled_time_count counter\n")
 	for _, m := range podMetrics {
-		if m.nr_periods > 0 {
-			fmt.Fprintf(w, `pod_cpu_throttled_time_count{namespace="%s", pod="%s"} %d`+"\n", m.Namespace, m.Name, m.throttled_time)
-		}
+		fmt.Fprintf(w, `pod_cpu_throttled_time_count{namespace="%s", pod="%s"} %d`+"\n", m.Namespace, m.Name, m.throttled_time)
 	}
 
 	fmt.Fprintf(w, "# HELP pod_cpu_limit CPU limit Pod\n")
@@ -126,25 +120,19 @@ func SendPrometheusNodeData(w http.ResponseWriter, logger *logrus.Logger, ctx co
 	fmt.Fprintf(w, "# TYPE namespace_cpu_nr_throttled_count counter\n")
 	for _, ns := range keys {
 		m := nsTotals[ns]
-		if m.nr_periods > 0 {
-			fmt.Fprintf(w, `namespace_cpu_nr_throttled_count{namespace="%s"} %d`+"\n", ns, m.nr_throttled)
-		}
+		fmt.Fprintf(w, `namespace_cpu_nr_throttled_count{namespace="%s"} %d`+"\n", ns, m.nr_throttled)
 	}
 	fmt.Fprintf(w, "# HELP namespace_cpu_nr_periods_count CPU periods per Namespace from containers\n")
 	fmt.Fprintf(w, "# TYPE namespace_cpu_nr_periods_count counter\n")
 	for _, ns := range keys {
 		m := nsTotals[ns]
-		if m.nr_periods > 0 {
-			fmt.Fprintf(w, `namespace_cpu_nr_periods_count{namespace="%s"} %d`+"\n", ns, m.nr_periods)
-		}
+		fmt.Fprintf(w, `namespace_cpu_nr_periods_count{namespace="%s"} %d`+"\n", ns, m.nr_periods)
 	}
 	fmt.Fprintf(w, "# HELP namespace_cpu_throttled_time_count CPU throttled time per Namespace from containers\n")
 	fmt.Fprintf(w, "# TYPE namespace_cpu_throttled_time_count counter\n")
 	for _, ns := range keys {
 		m := nsTotals[ns]
-		if m.nr_periods > 0 {
-			fmt.Fprintf(w, `namespace_cpu_throttled_time_count{namespace="%s"} %d`+"\n", ns, m.throttled_time)
-		}
+		fmt.Fprintf(w, `namespace_cpu_throttled_time_count{namespace="%s"} %d`+"\n", ns, m.throttled_time)
 	}
 
 	fmt.Fprintf(w, "# HELP namespace_cpu_limit CPU limit Namespace\n")
