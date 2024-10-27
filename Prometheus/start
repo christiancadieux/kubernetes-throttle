@@ -4,6 +4,9 @@ DIR=~/go/src/github.com/christiancadieux/kubernetes-throttle/Prometheus
 docker rm my-prometheus
 
 docker run --name my-prometheus  -p 9090:9090 \
-    --volume ~/prometheus:/prometheus  \
+    --volume /tmp/prometheus:/prometheus  \
     --mount type=bind,source=$DIR/prometheus.yaml,destination=/etc/prometheus/prometheus.yml \
     prom/prometheus
+
+
+# access prometheus UI at localhost:9090
