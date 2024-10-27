@@ -6,6 +6,10 @@ Runs on each node and returns data from the pseudo-files in /sys/fs/cgroup/cpu,c
 
 This service runs as a Kubernets daemonset on each node to extract cpu activity and throttling.
 
+Generate throttling percentage graph using Prometheus:
+
+![graph]( doc/graph1.png)
+
 
 ## Prometheus Format
 
