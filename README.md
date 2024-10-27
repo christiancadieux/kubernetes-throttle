@@ -4,7 +4,7 @@
 
 Runs on each node and returns data from the pseudo-files in /sys/fs/cgroup/cpu,cpuacct/kubepods/.
 
-This service runs as a Kubernets daemonset on each node to extract cpu activity and throttling.
+This service runs as a Kubernets daemonset on each node to extract cpu activity and throttling. See /Kubernetes for the daemonset spec.
 
 Generate throttling percentage graph using Prometheus:
 
@@ -16,7 +16,7 @@ Generate throttling percentage graph using Prometheus:
 The endpoints /metrics returns prometheus-compatible metrics for each node called.
 
 
-## Prometheus example
+## Prometheus /metrics example
 
 ```
 $ curl IP:9750/metrics
