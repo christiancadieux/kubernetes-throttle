@@ -27,4 +27,4 @@ scrape_configs:
 
   - job_name: throttle
     static_configs:
-      - targets: [ replace with list of IP:port of the kubernetes nodes ]
+      - targets: [ replace with list of IP:9750 of the kubernetes nodes ]

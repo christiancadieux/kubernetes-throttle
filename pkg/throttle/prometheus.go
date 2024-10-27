@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/comcast-ccp-containers/clog"
+	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -30,7 +30,7 @@ type PodMetrics struct {
 }
 
 // SendPrometheusNodeData - Send throttle and df data
-func SendPrometheusNodeData(w http.ResponseWriter, logger *clog.Logger, ctx context.Context,
+func SendPrometheusNodeData(w http.ResponseWriter, logger *logrus.Logger, ctx context.Context,
 	kubeClient *kubernetes.Clientset, nodeName string, cgroupPath string) error {
 
 	pods, err := kubeClient.CoreV1().Pods("").List(context.Background(), v1.ListOptions{
@@ -163,7 +163,7 @@ func SendPrometheusNodeData(w http.ResponseWriter, logger *clog.Logger, ctx cont
 	return nil
 }
 
-func readNodeCpu(logger *clog.Logger) ([]int64, []int64) {
+func readNodeCpu(logger *logrus.Logger) ([]int64, []int64) {
 
 	// PER CPU
 	usageAllCpu, err := readLines(CPUPATH + "/cpuacct.usage_all")
@@ -200,7 +200,7 @@ func readNodeCpu(logger *clog.Logger) ([]int64, []int64) {
 	return usageCpuUser, usageCpuSys
 }
 
-func readCgroup(logger *clog.Logger, pod corev1.Pod, cgroupPath string) (int64, int64, int64, int64, int64, bool) {
+func readCgroup(logger *logrus.Logger, pod corev1.Pod, cgroupPath string) (int64, int64, int64, int64, int64, bool) {
 	var nr_periods int64 = 0
 	var nr_throttled int64 = 0
 	var throttled_time int64 = 0

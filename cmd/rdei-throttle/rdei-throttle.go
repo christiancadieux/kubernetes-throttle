@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/christiancadieux/kubernetes-throttle/clog"
 	"github.com/christiancadieux/kubernetes-throttle/pkg/client"
 	"github.com/christiancadieux/kubernetes-throttle/pkg/throttle"
 	"github.com/christiancadieux/kubernetes-throttle/pkg/utils"
 	"github.com/gorilla/mux"
+	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 	"net/http"
 	"os"
@@ -15,20 +15,18 @@ import (
 )
 
 const (
-	CGROUP0           = "/sys/fs/cgroup/cpu,cpuacct/kubepods"
-	ENV_NAME          = "ENV_NAME"
-	SERVER_PORT       = "SERVER_PORT"
-	PROMETHEUS_PORT   = "PROMETHEUS_PORT"
-	DEFAULT_PORT      = "9191"
-	DEFAULT_PROM_PORT = "10099"
-	SERVER_LOGGING    = "SERVER_LOGGING"
-	MY_NODE_NAME      = "MY_NODE_NAME"
+	CGROUP0        = "/sys/fs/cgroup/cpu,cpuacct/kubepods"
+	ENV_NAME       = "ENV_NAME"
+	SERVER_PORT    = "SERVER_PORT"
+	DEFAULT_PORT   = "9191"
+	SERVER_LOGGING = "SERVER_LOGGING"
+	MY_NODE_NAME   = "MY_NODE_NAME"
 )
 
 func main() {
 	ctx, cxl := context.WithCancel(context.Background())
 	defer cxl()
-	logger := clog.MakeSplunkLogger(clog.Fields{"s": "rdei-throttle"})
+	logger := logrus.New()
 
 	r := mux.NewRouter()
 	port := DEFAULT_PORT
@@ -36,11 +34,7 @@ func main() {
 	if portEnv != "" {
 		port = portEnv
 	}
-	promPort := DEFAULT_PROM_PORT
-	promPortEnv := os.Getenv(PROMETHEUS_PORT)
-	if promPortEnv != "" {
-		promPort = promPortEnv
-	}
+
 	site := os.Getenv(ENV_NAME)
 	if site == "" {
 		site = utils.MyNodeName()
@@ -60,15 +54,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	if os.Getenv("TEST") == "Y" {
-		fmt.Println("Calling throttle.test()")
-		err := throttle.Test(logger, kubeClient, cgroupPath)
-		if err != nil {
-			logger.Error(err)
-		}
-		os.Exit(0)
-	}
-
 	nodeName := os.Getenv(MY_NODE_NAME)
 	if nodeName == "" {
 		logger.Error("env MY_NODE_NAME is not defined")
@@ -82,7 +67,7 @@ func main() {
 }
 
 // called by prometheus every minute
-func prometheusNode(logger *clog.Logger, ctx context.Context, kubeClient *kubernetes.Clientset,
+func prometheusNode(logger *logrus.Logger, ctx context.Context, kubeClient *kubernetes.Clientset,
 	nodeName string, loggingOn bool, cgroupPath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

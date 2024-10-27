@@ -2,10 +2,9 @@
 # Node Throttling Metrics Service
 
 
-Runs on each node and returns data from the pseudo-files in /sys/fs/cgroup/cpu,cpuacct/kubepods/burstable/pod for each pod/container requested.
+Runs on each node and returns data from the pseudo-files in /sys/fs/cgroup/cpu,cpuacct/kubepods/.
 
-Throttling usually starts when the containers cpu is > requested  and there is limited total resources on the node.
-It requires that we add a service (or daemonset) to each node and use a node-port to be able to extract throttling metrics from each node.
+This service runs as a Kubernets daemonset on each node to extract cpu activity and throttling.
 
 
 ## Prometheus Format
