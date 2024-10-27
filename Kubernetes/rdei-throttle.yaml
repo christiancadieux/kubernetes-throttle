@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  annotations:
+  labels:
+    app: rdei-throttle
+  name: rdei-throttle
+spec:
+  updateStrategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 3
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      name: rdei-throttle
+  template:
+    metadata:
+      labels:
+        name: rdei-throttle
+    spec:
+      containers:
+      - env:
+        - name: MY_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: CGROUP_PATH
+          value: "/cgroup"
+        - name: SERVER_PORT
+          value: "9750"
+        image: rdei-throttle:v1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9750
+          hostPort: 9750
+          name: metrics
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+
+        name: rdei-throttle
+        volumeMounts:
+        - mountPath: /cgroup
+          name: cgroup
+        - mountPath: /etc/resolv.conf
+          name: conf
+        - mountPath: /etc/environment
+          name: envfile
+        - mountPath: /etc/hosts
+          name: hosts
+        - mountPath: /etc/kubernetes
+          name: config
+      hostNetwork: true
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      volumes:
+      - hostPath:
+          path: /sys/fs/cgroup/cpu,cpuacct/kubepods
+          type: ""
+        name: cgroup
+      - hostPath:
+          path: /etc/resolv.conf
+          type: ""
+        name: conf
+      - hostPath:
+          path: /etc/environment
+          type: ""
+        name: envfile
+      - hostPath:
+          path: /etc/hosts
+          type: ""
+        name: hosts
+      - hostPath:
+          path: /etc/kubernetes
+          type: ""
+        name: config
