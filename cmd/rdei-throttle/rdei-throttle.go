@@ -46,6 +46,16 @@ func main() {
 	}
 	loggingOn := os.Getenv(SERVER_LOGGING) == "Y"
 
+	cgroupVersion := "v1"
+	// find the cgroup
+	if stat, err := os.Stat(cgroupPath + "/cpu,cpuacct"); err == nil && stat.IsDir() {
+		cgroupPath += "/cpu,cpuacct/kubepods"
+	} else {
+		cgroupPath += "/kubepods" // cgroupv2
+		cgroupVersion = "v2"
+	}
+	logger.Infof("Using cgroupPath=%s ", cgroupPath)
+
 	var err error
 	kubeClient, err := client.LoadClient()
 	if err != nil {
@@ -61,17 +71,17 @@ func main() {
 	}
 	logger.Infof("Server http://%s:%s/metrics", nodeName, port)
 
-	r.HandleFunc("/metrics", prometheusNode(logger, ctx, kubeClient, nodeName, loggingOn, cgroupPath))
+	r.HandleFunc("/metrics", prometheusNode(logger, ctx, kubeClient, nodeName, loggingOn, cgroupPath, cgroupVersion))
 
 	http.ListenAndServe(":"+port, r)
 }
 
 // called by prometheus every minute
 func prometheusNode(logger *logrus.Logger, ctx context.Context, kubeClient *kubernetes.Clientset,
-	nodeName string, loggingOn bool, cgroupPath string) http.HandlerFunc {
+	nodeName string, loggingOn bool, cgroupPath string, cgroupVersion string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		throttle.SendPrometheusNodeData(w, logger, ctx, kubeClient, nodeName, cgroupPath)
+		throttle.SendPrometheusNodeData(w, logger, ctx, kubeClient, nodeName, cgroupPath, cgroupVersion)
 		if loggingOn {
 			lapse := time.Now().Sub(start)
 			logger.Infof("%s - %s %s - %v", r.RemoteAddr, r.Method, r.RequestURI, lapse)

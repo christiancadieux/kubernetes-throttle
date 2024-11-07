@@ -25,13 +25,14 @@ type PodMetrics struct {
 	nr_periods     int64
 	nr_throttled   int64
 	throttled_time int64
+	burst_time     int64
 	limit          int64
 	usage          int64
 }
 
 // SendPrometheusNodeData - Send throttle and df data
 func SendPrometheusNodeData(w http.ResponseWriter, logger *logrus.Logger, ctx context.Context,
-	kubeClient *kubernetes.Clientset, nodeName string, cgroupPath string) error {
+	kubeClient *kubernetes.Clientset, nodeName string, cgroupPath string, cgroupVersion string) error {
 
 	pods, err := kubeClient.CoreV1().Pods("").List(context.Background(), v1.ListOptions{
 		FieldSelector: "spec.nodeName=" + nodeName,
@@ -44,36 +45,39 @@ func SendPrometheusNodeData(w http.ResponseWriter, logger *logrus.Logger, ctx co
 	nsTotals := map[string]*PodMetrics{}
 
 	// per-node metrics
-	usageCpuUser, usageCpuSys := readNodeCpu(logger)
-	if usageCpuUser != nil {
-		fmt.Fprintf(w, "# HELP node_cpu_usage_count CPU accountUsage User per Cpu\n")
-		fmt.Fprintf(w, "# TYPE node_cpu_usage_count counter\n")
-		for ix, user := range usageCpuUser {
-			if user > 0 {
-				fmt.Fprintf(w, `node_cpu_usage_count{type="user", cpu="%03d"} %d`+"\n", ix, user)
+	if os.Getenv("PER_NODE_METRICS") == "Y" {
+		usageCpuUser, usageCpuSys := readNodeCpu(logger)
+		if usageCpuUser != nil {
+			fmt.Fprintf(w, "# HELP node_cpu_usage_count CPU accountUsage User per Cpu\n")
+			fmt.Fprintf(w, "# TYPE node_cpu_usage_count counter\n")
+			for ix, user := range usageCpuUser {
+				if user > 0 {
+					fmt.Fprintf(w, `node_cpu_usage_count{type="user", cpu="%03d"} %d`+"\n", ix, user)
+				}
 			}
-		}
-		for ix, sys := range usageCpuSys {
-			if sys > 0 {
-				fmt.Fprintf(w, `node_cpu_usage_count{type="sys", cpu="%03d"} %d`+"\n", ix, sys)
+			for ix, sys := range usageCpuSys {
+				if sys > 0 {
+					fmt.Fprintf(w, `node_cpu_usage_count{type="sys", cpu="%03d"} %d`+"\n", ix, sys)
+				}
 			}
 		}
 	}
 
 	// per pod/namespace metrics
 	for _, pod := range pods.Items {
-		nr_periods, nr_throttled, throttled_time, limit, usage, found := readCgroup(logger, pod, cgroupPath)
+		nr_periods, nr_throttled, throttled_time, burst_time, limit, usage, found := readCgroup(logger, pod, cgroupPath, cgroupVersion)
 		if !found {
 			continue
 		}
 		podMetrics = append(podMetrics, PodMetrics{pod.Namespace, pod.Name, nr_periods,
-			nr_throttled, throttled_time, limit, usage})
+			nr_throttled, throttled_time, burst_time, limit, usage})
 		if _, ok := nsTotals[pod.Namespace]; !ok {
 			nsTotals[pod.Namespace] = &PodMetrics{}
 		}
 		nsTotals[pod.Namespace].nr_throttled += nr_throttled
 		nsTotals[pod.Namespace].nr_periods += nr_periods
 		nsTotals[pod.Namespace].throttled_time += throttled_time
+		nsTotals[pod.Namespace].burst_time += burst_time
 		nsTotals[pod.Namespace].limit += limit
 		nsTotals[pod.Namespace].usage += usage
 
@@ -95,6 +99,12 @@ func SendPrometheusNodeData(w http.ResponseWriter, logger *logrus.Logger, ctx co
 	fmt.Fprintf(w, "# TYPE pod_cpu_throttled_time_count counter\n")
 	for _, m := range podMetrics {
 		fmt.Fprintf(w, `pod_cpu_throttled_time_count{namespace="%s", pod="%s"} %d`+"\n", m.Namespace, m.Name, m.throttled_time)
+	}
+
+	fmt.Fprintf(w, "# HELP pod_cpu_burst_time_count CPU Burst time per Pod\n")
+	fmt.Fprintf(w, "# TYPE pod_cpu_burst_time_count counter\n")
+	for _, m := range podMetrics {
+		fmt.Fprintf(w, `pod_cpu_burst_time_count{namespace="%s", pod="%s"} %d`+"\n", m.Namespace, m.Name, m.burst_time)
 	}
 
 	fmt.Fprintf(w, "# HELP pod_cpu_limit CPU limit Pod\n")
@@ -133,6 +143,13 @@ func SendPrometheusNodeData(w http.ResponseWriter, logger *logrus.Logger, ctx co
 	for _, ns := range keys {
 		m := nsTotals[ns]
 		fmt.Fprintf(w, `namespace_cpu_throttled_time_count{namespace="%s"} %d`+"\n", ns, m.throttled_time)
+	}
+
+	fmt.Fprintf(w, "# HELP namespace_cpu_burst_time_count CPU Burst time per Namespace from containers\n")
+	fmt.Fprintf(w, "# TYPE namespace_cpu_burst_time_count counter\n")
+	for _, ns := range keys {
+		m := nsTotals[ns]
+		fmt.Fprintf(w, `namespace_cpu_burst_time_count{namespace="%s"} %d`+"\n", ns, m.burst_time)
 	}
 
 	fmt.Fprintf(w, "# HELP namespace_cpu_limit CPU limit Namespace\n")
@@ -188,10 +205,11 @@ func readNodeCpu(logger *logrus.Logger) ([]int64, []int64) {
 	return usageCpuUser, usageCpuSys
 }
 
-func readCgroup(logger *logrus.Logger, pod corev1.Pod, cgroupPath string) (int64, int64, int64, int64, int64, bool) {
+func readCgroup(logger *logrus.Logger, pod corev1.Pod, cgroupPath string, cgroupVersion string) (int64, int64, int64, int64, int64, int64, bool) {
 	var nr_periods int64 = 0
 	var nr_throttled int64 = 0
 	var throttled_time int64 = 0
+	var burst_time int64 = 0
 	var limit int64 = 0
 	var usage int64 = 0
 
@@ -221,46 +239,75 @@ func readCgroup(logger *logrus.Logger, pod corev1.Pod, cgroupPath string) (int64
 			}
 			if words[0] == "nr_periods" {
 				nr_periods = i
-
+			} else if words[0] == "usage_usec" { // cgroupv2
+				usage = i * 1000
 			} else if words[0] == "throttled_time" {
 				throttled_time = i
-
+			} else if words[0] == "throttled_usec" { // cgroupv2
+				throttled_time = i * 1000
+			} else if words[0] == "burst_time" {
+				burst_time = i
+			} else if words[0] == "burst_usec" { // cgroupv2
+				burst_time = i * 1000
 			} else if words[0] == "nr_throttled" {
 				nr_throttled = i
 			}
 		}
 		// read /cpu.cfs_quota_us = k8s resources.limit
-		quotaValue, err := os.ReadFile(path + "/cpu.cfs_quota_us")
-		if err != nil || len(quotaValue) < 2 {
-			logger.Errorf("readLines /cpu.cfs_quota_us error - %v", err)
-			continue
-		}
-		i, err := strconv.ParseInt(string(quotaValue[:len(quotaValue)-1]), 10, 64) // remove newline
-		if err != nil {
-			logger.Errorf("ParseInt error %s - %v", string(quotaValue), err)
-			continue
+		var quotaValue []byte
+		var i int64
+		if cgroupVersion == "v1" {
+			quotaValue, err = os.ReadFile(path + "/cpu.cfs_quota_us")
+			if err != nil || len(quotaValue) < 2 {
+				logger.Errorf("readFile /cpu.cfs_quota_us error - %v", err)
+				continue
+			}
+			i, err = strconv.ParseInt(string(quotaValue[:len(quotaValue)-1]), 10, 64) // remove newline
+			if err != nil {
+				logger.Errorf("ParseInt1 error %s - %v", string(quotaValue), err)
+				continue
+			}
+		} else {
+			maxLine, err := os.ReadFile(path + "/cpu.max")
+			maxValues := strings.Split(string(maxLine), " ")
+			if err != nil || len(maxValues) != 2 {
+				logger.Errorf("readFile s=%s err=%v", maxLine, err)
+				continue
+			}
+			if maxValues[0] == "max" {
+				i = 10000000
+			} else {
+				i, err = strconv.ParseInt(maxValues[0], 10, 64) // remove newline
+				if err != nil {
+					logger.Errorf("ParseInt2 error %s - %v", maxValues[0], err)
+					continue
+				}
+			}
 		}
 		if i > 0 {
 			limit = i
 		}
+
 		// read /cpuacct.usage
-		usageValue, err := os.ReadFile(path + "/cpuacct.usage")
-		if err != nil || len(usageValue) < 2 {
-			logger.Errorf("readLines cpuacct.usage error - %v", err)
-			continue
-		}
-		i, err = strconv.ParseInt(string(usageValue[:len(usageValue)-1]), 10, 64) // remove newline
-		if err != nil {
-			logger.Errorf("ParseInt error %s - %v", string(usageValue), err)
-			continue
-		}
-		if i > 0 {
-			usage = i
+		if cgroupVersion == "v1" {
+			usageValue, err := os.ReadFile(path + "/cpuacct.usage")
+			if err != nil || len(usageValue) < 2 {
+				logger.Errorf("readLines cpuacct.usage error - %v", err)
+				continue
+			}
+			i, err = strconv.ParseInt(string(usageValue[:len(usageValue)-1]), 10, 64) // remove newline
+			if err != nil {
+				logger.Errorf("ParseInt3 error %s - %v", string(usageValue), err)
+				continue
+			}
+			if i > 0 {
+				usage = i
+			}
 		}
 
 		break
 	}
-	return nr_periods, nr_throttled, throttled_time, limit, usage, found
+	return nr_periods, nr_throttled, throttled_time, burst_time, limit, usage, found
 }
 
 func readLines(path string) ([]string, error) {
